@@ -1,9 +1,11 @@
 
+from datetime import datetime
+
 print()
 print()
 print("================================================")
 print()
-print("        WELCOME TO POCKET TRACK 💸 !!")
+print("       WELCOME TO POCKET TRACK 💸 !!")
 print("     because, bro needs to stop being broke...")
 print("       Let's see where the money disappears ")
 print()
@@ -20,10 +22,21 @@ try:
 
         if len(data) == 2:
             expense_name = data[0]
+            expense_date = ""
 
             try:
                 amount = float(data[1])
-                expenses.append([expense_name, amount])
+                expenses.append([expense_name, amount, expense_date])
+            except ValueError:
+                continue
+
+        elif len(data) == 3:
+            expense_name = data[0]
+            expense_date = data[2]
+
+            try:
+                amount = float(data[1])
+                expenses.append([expense_name, amount, expense_date])
             except ValueError:
                 continue
 
@@ -55,7 +68,9 @@ while True:
         print("FINANCIAL DAMAGE CHECKKKK 😭")
         print()
 
-        expense_name = input("What did you spend on? huh...: ").strip()
+        expense_name = input(
+            "What did you spend on? huh...: "
+        ).strip()
 
         if expense_name == "" or "," in expense_name:
             print("Brooo 😭 enter a name without commas!")
@@ -72,19 +87,26 @@ while True:
             print("Numbers only, yawr! 😭 Try again.")
             continue
 
+        # GET CURRENT DATE
+
+        expense_date = datetime.now().strftime("%d-%m-%Y")
+
         # ADD TO LIST
 
-        expenses.append([expense_name, amount])
+        expenses.append([expense_name, amount, expense_date])
 
         # SAVE TO FILE
 
         file = open("expenses.txt", "a")
-        file.write(expense_name + "," + str(amount) + "\n")
+        file.write(
+            expense_name + "," + str(amount) + "," + expense_date + "\n"
+        )
         file.close()
 
         print()
         print("Purchase logged:", expense_name)
         print("Amount: ₹", amount)
+        print("Date:", expense_date)
         print("Expense saved successfully! 💸")
 
     # VIEW EXPENSES
@@ -99,7 +121,18 @@ while True:
 
         else:
             for expense in expenses:
-                print(expense[0], "- ₹", expense[1])
+                if expense[2]:
+                    print(
+                        expense[0],
+                        "- ₹", expense[1],
+                        "- Date:", expense[2]
+                    )
+                else:
+                    print(
+                        expense[0],
+                        "- ₹", expense[1],
+                        "- Date unavailable"
+                    )
 
     # VIEW TOTAL SPENDING
 

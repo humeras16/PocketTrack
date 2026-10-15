@@ -2,12 +2,10 @@
 from datetime import datetime
 
 print()
-print()
 print("================================================")
-print()
 print("       WELCOME TO POCKET TRACK 💸 !!")
 print("     because, bro needs to stop being broke...")
-print("       Let's see where the money disappears ")
+print("       Let's see where the money disappears")
 print()
 
 expenses = []
@@ -24,21 +22,18 @@ try:
             expense_name = data[0]
             expense_date = ""
 
-            try:
-                amount = float(data[1])
-                expenses.append([expense_name, amount, expense_date])
-            except ValueError:
-                continue
-
         elif len(data) == 3:
             expense_name = data[0]
             expense_date = data[2]
 
-            try:
-                amount = float(data[1])
-                expenses.append([expense_name, amount, expense_date])
-            except ValueError:
-                continue
+        else:
+            continue
+
+        try:
+            amount = float(data[1])
+            expenses.append([expense_name, amount, expense_date])
+        except ValueError:
+            continue
 
     file.close()
 
@@ -50,23 +45,23 @@ except FileNotFoundError:
 # MAIN MENU
 
 while True:
+    print()
     print("========= POCKETTRACK: WALLET CHECK 💳 =========")
     print()
     print("1. Add an expense")
     print("2. View expenses")
     print("3. View total spending")
-    print("4. Exit")
+    print("4. Monthly spending report 📊")
+    print("5. Exit")
     print()
 
-    choice = input("Choose your move (1-4): ")
+    choice = input("Choose your move (1-5): ")
 
     # ADD EXPENSE
 
     if choice == "1":
-        print("------------------------------------------------")
         print()
         print("FINANCIAL DAMAGE CHECKKKK 😭")
-        print()
 
         expense_name = input(
             "What did you spend on? huh...: "
@@ -114,7 +109,6 @@ while True:
     elif choice == "2":
         print()
         print("========= YOUR EXPENSES 📋 =========")
-        print()
 
         if len(expenses) == 0:
             print("No expenses yet. Go spend... responsibly 😭")
@@ -139,7 +133,6 @@ while True:
     elif choice == "3":
         print()
         print("========= TOTAL DAMAGE 💸 =========")
-        print()
 
         total = 0
 
@@ -148,9 +141,61 @@ while True:
 
         print("Total money disappeared: ₹", round(total, 2))
 
-    # EXIT
+    # MONTHLY SPENDING REPORT
 
     elif choice == "4":
+        print()
+        print("========= MONTHLY MONEY REPORT 📊 =========")
+
+        month_input = input(
+            "Enter month and year (MM-YYYY), e.g. 10-2026: "
+        ).strip()
+
+        try:
+            selected_month = datetime.strptime(
+                month_input, "%m-%Y"
+            )
+
+        except ValueError:
+            print("Invalid format! Use MM-YYYY, like 10-2026.")
+            continue
+
+        monthly_total = 0
+        monthly_count = 0
+
+        for expense in expenses:
+            if expense[2] == "":
+                continue
+
+            try:
+                expense_date = datetime.strptime(
+                    expense[2], "%d-%m-%Y"
+                )
+
+                if (
+                    expense_date.month == selected_month.month
+                    and expense_date.year == selected_month.year
+                ):
+                    monthly_total += expense[1]
+                    monthly_count += 1
+
+            except ValueError:
+                continue
+
+        print()
+        print(
+            "Report for:",
+            selected_month.strftime("%B %Y")
+        )
+        print("Number of expenses:", monthly_count)
+        print("Total spent: ₹", round(monthly_total, 2))
+
+        if monthly_count == 0:
+            print("No dated expenses found for this month.")
+
+    # EXIT
+
+    elif choice == "5":
         print()
         print("BYEEE 👋")
         print("Stop spending. Start surviving. 😛💸")
@@ -159,7 +204,4 @@ while True:
     # INVALID MENU CHOICE
 
     else:
-        print("Invalid choice!!! Choose 1-4.")
-
-    print()
-    print()
+        print("Invalid choice!!! Choose 1-5.")

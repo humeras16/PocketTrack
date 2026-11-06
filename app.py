@@ -1,5 +1,5 @@
-
 import os
+import csv
 from datetime import datetime
 
 import pandas as pd
@@ -7,14 +7,21 @@ import plotly.express as px
 import streamlit as st
 
 
+# ==========================================
 # PAGE SETTINGS
+# ==========================================
+
 st.set_page_config(
     page_title="PocketTrack | Expense Dashboard",
     page_icon="💸",
     layout="wide"
 )
 
+
+# ==========================================
 # COLOURS
+# ==========================================
+
 BG = "#0B0F12"
 SIDEBAR = "#10171B"
 CARD = "#131C20"
@@ -24,7 +31,22 @@ BRIGHT_TEAL = "#83E2CD"
 TEXT = "#F2F7F6"
 MUTED = "#94A6A8"
 
+CATEGORIES = [
+    "Food",
+    "Travel",
+    "Shopping",
+    "Education",
+    "Bills",
+    "Entertainment",
+    "Health",
+    "Other"
+]
+
+
+# ==========================================
 # CUSTOM DESIGN
+# ==========================================
+
 st.markdown(
     f"""
     <style>
@@ -167,47 +189,109 @@ st.markdown(
         font-size: 12px;
         padding-top: 35px;
     }}
+
+    div.stButton > button {{
+        background-color: {TEAL};
+        color: #0B0F12;
+        border: none;
+        border-radius: 10px;
+        font-weight: 700;
+    }}
+
+    div.stButton > button:hover {{
+        background-color: {BRIGHT_TEAL};
+        color: #0B0F12;
+    }}
+
     </style>
     """,
     unsafe_allow_html=True
 )
 
 
+# ==========================================
 # FILE LOCATION
+# ==========================================
+
 DATA_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "expenses.txt"
 )
 
 
+# ==========================================
 # LOAD EXPENSES
+# ==========================================
+
 def load_expenses():
+
     records = []
 
     if not os.path.exists(DATA_FILE):
         return pd.DataFrame(
-            columns=["Name", "Amount", "Date"]
+            columns=["Name", "Amount", "Date", "Category"]
         )
 
     with open(DATA_FILE, "r", encoding="utf-8") as file:
+
         for line in file:
+
             line = line.strip()
 
             if not line:
                 continue
 
-            parts = line.rsplit(",", 2)
-
             try:
-                if len(parts) == 3:
-                    name, amount, date_text = parts
+
+                # Read newly saved CSV records and
+                # older records with two or three fields.
+
+                if line.startswith('"'):
+
+                    parts = next(csv.reader([line]))
+
+                else:
+
+                    parts = line.rsplit(",", 3)
+
+                    if len(parts) == 4:
+
+                        try:
+                            datetime.strptime(
+                                parts[2].strip(),
+                                "%d-%m-%Y"
+                            )
+
+                        except ValueError:
+
+                            parts = line.rsplit(",", 2)
+
+                if len(parts) == 4:
+
+                    name, amount, date_text, category = parts
+
                     date_value = datetime.strptime(
-                        date_text.strip(), "%d-%m-%Y"
+                        date_text.strip(),
+                        "%d-%m-%Y"
                     ).date()
 
+                elif len(parts) == 3:
+
+                    name, amount, date_text = parts
+
+                    date_value = datetime.strptime(
+                        date_text.strip(),
+                        "%d-%m-%Y"
+                    ).date()
+
+                    category = "Uncategorized"
+
                 elif len(parts) == 2:
+
                     name, amount = parts
+
                     date_value = None
+                    category = "Uncategorized"
 
                 else:
                     continue
@@ -216,38 +300,51 @@ def load_expenses():
                 name = name.strip()
 
                 if name and amount >= 0:
+
                     records.append({
                         "Name": name,
                         "Amount": amount,
-                        "Date": date_value
+                        "Date": date_value,
+                        "Category": category.strip()
                     })
 
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, csv.Error):
                 continue
 
-    df = pd.DataFrame(records)
+    df = pd.DataFrame(
+        records,
+        columns=["Name", "Amount", "Date", "Category"]
+    )
 
     if not df.empty:
+
         df["Date"] = pd.to_datetime(
-            df["Date"], errors="coerce"
+            df["Date"],
+            errors="coerce"
         )
 
     return df
 
 
+# Load saved expenses
 df = load_expenses()
 
 
+# ==========================================
 # CALCULATIONS
+# ==========================================
+
 today = pd.Timestamp.today().normalize()
 current_month = today.to_period("M")
 
 total_spent = df["Amount"].sum() if not df.empty else 0
+
 transaction_count = len(df)
 
 dated_df = df.dropna(subset=["Date"]).copy()
 
 if not dated_df.empty:
+
     dated_df["MonthKey"] = dated_df["Date"].dt.to_period("M")
 
     monthly_df = (
@@ -261,28 +358,38 @@ if not dated_df.empty:
     )
 
     current_month_spending = dated_df.loc[
-        dated_df["MonthKey"] == current_month, "Amount"
+        dated_df["MonthKey"] == current_month,
+        "Amount"
     ].sum()
 
 else:
+
     monthly_df = pd.DataFrame(
         columns=["MonthKey", "Amount", "Month"]
     )
+
     current_month_spending = 0
 
 
+# ==========================================
 # CHART STYLE
+# ==========================================
+
 def chart_layout(fig, height=380):
+
     fig.update_layout(
         height=height,
         paper_bgcolor=CARD,
         plot_bgcolor=CARD,
+
         font=dict(
             family="Inter, sans-serif",
             color=TEXT,
             size=12
         ),
+
         margin=dict(l=20, r=20, t=35, b=20),
+
         hoverlabel=dict(
             bgcolor="#172328",
             font_color=TEXT
@@ -304,8 +411,12 @@ def chart_layout(fig, height=380):
     return fig
 
 
+# ==========================================
 # MONTHLY LINE GRAPH
+# ==========================================
+
 def show_monthly_chart():
+
     st.markdown(
         '<div class="section-heading">Monthly Spending Trend</div>',
         unsafe_allow_html=True
@@ -319,11 +430,13 @@ def show_monthly_chart():
     )
 
     if monthly_df.empty:
+
         st.info(
             "Your monthly line graph will appear when you have "
             "expenses with dates. Older undated expenses still "
             "count toward your overall spending."
         )
+
         return
 
     fig = px.line(
@@ -339,16 +452,19 @@ def show_monthly_chart():
 
     fig.update_traces(
         line=dict(color=TEAL, width=3),
+
         marker=dict(
             color=BRIGHT_TEAL,
             size=9,
             line=dict(color=CARD, width=2)
         ),
+
         fill="tozeroy",
         fillcolor="rgba(85,198,174,0.10)",
+
         hovertemplate=(
             "<b>%{x}</b><br>"
-            "Spent: %{y:,.2f}"
+            "Spent: ₹%{y:,.2f}"
             "<extra></extra>"
         )
     )
@@ -368,8 +484,12 @@ def show_monthly_chart():
     )
 
 
-# CIRCULAR EXPENSE BREAKDOWN
+# ==========================================
+# CATEGORY-WISE EXPENSE BREAKDOWN
+# ==========================================
+
 def show_expense_breakdown():
+
     st.markdown(
         '<div class="section-heading">Where Your Money Goes</div>',
         unsafe_allow_html=True
@@ -377,39 +497,26 @@ def show_expense_breakdown():
 
     st.markdown(
         '<div class="section-subtitle">'
-        'See which expenses make up your spending.'
+        'See how your spending is divided across categories.'
         '</div>',
         unsafe_allow_html=True
     )
 
     if df.empty:
+
         st.info("Add some expenses to see your breakdown.")
+
         return
 
     breakdown = (
-        df.groupby("Name", as_index=False)["Amount"]
+        df.groupby("Category", as_index=False)["Amount"]
         .sum()
         .sort_values("Amount", ascending=False)
     )
 
-    if len(breakdown) > 7:
-        main_categories = breakdown.head(6).copy()
-        other_amount = breakdown.iloc[6:]["Amount"].sum()
-
-        breakdown = pd.concat(
-            [
-                main_categories,
-                pd.DataFrame([{
-                    "Name": "Other expenses",
-                    "Amount": other_amount
-                }])
-            ],
-            ignore_index=True
-        )
-
     fig = px.pie(
         breakdown,
-        names="Name",
+        names="Category",
         values="Amount",
         hole=0.68,
         color_discrete_sequence=[
@@ -419,19 +526,23 @@ def show_expense_breakdown():
             "#B3E8DC",
             "#547B78",
             "#A3B9B6",
-            "#6D8C9A"
+            "#6D8C9A",
+            "#426B70",
+            "#8FAFA9"
         ]
     )
 
     fig.update_traces(
         textposition="outside",
         textinfo="percent",
+
         hovertemplate=(
             "<b>%{label}</b><br>"
-            "Amount: %{value:,.2f}<br>"
+            "Amount: ₹%{value:,.2f}<br>"
             "Share: %{percent}"
             "<extra></extra>"
         ),
+
         marker=dict(
             line=dict(color=CARD, width=3)
         )
@@ -448,8 +559,12 @@ def show_expense_breakdown():
     )
 
 
+# ==========================================
 # RECENT TRANSACTIONS
+# ==========================================
+
 def show_recent_transactions():
+
     st.markdown(
         '<div class="section-heading">Recent Transactions</div>',
         unsafe_allow_html=True
@@ -463,12 +578,16 @@ def show_recent_transactions():
     )
 
     if df.empty:
+
         st.info("No expenses recorded yet.")
+
         return
 
     recent = df.copy()
+
     recent["_sort_date"] = pd.to_datetime(
-        recent["Date"], errors="coerce"
+        recent["Date"],
+        errors="coerce"
     )
 
     recent = recent.sort_values(
@@ -477,15 +596,18 @@ def show_recent_transactions():
         na_position="last"
     ).head(8)
 
-    display_df = recent[["Name", "Amount", "Date"]].copy()
+    display_df = recent[
+        ["Name", "Amount", "Category", "Date"]
+    ].copy()
 
     display_df["Date"] = display_df["Date"].apply(
         lambda value: value.strftime("%d %b %Y")
-        if pd.notna(value) else "Date not recorded"
+        if pd.notna(value)
+        else "Date not recorded"
     )
 
     display_df["Amount"] = display_df["Amount"].map(
-        lambda value: f"{value:,.2f}"
+        lambda value: f"₹{value:,.2f}"
     )
 
     st.dataframe(
@@ -495,31 +617,169 @@ def show_recent_transactions():
     )
 
 
+# ==========================================
+# ADD EXPENSE FORM
+# ==========================================
+
+def add_expense_page():
+
+    st.title("Add a New Expense")
+
+    st.caption(
+        "Record your spending and keep everything organised."
+    )
+
+    st.markdown(
+        '<div class="section-heading">Transaction Details</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        '<div class="section-subtitle">'
+        'Enter the details below to add a new transaction.'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    with st.form("add_expense_form"):
+
+        expense_name = st.text_input(
+            "Expense Name",
+            placeholder="Example: Lunch, Books, Bus ticket"
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            expense_amount = st.number_input(
+                "Amount (₹)",
+                min_value=0.01,
+                value=100.0,
+                step=10.0
+            )
+
+        with col2:
+
+            expense_category = st.selectbox(
+                "Category",
+                CATEGORIES
+            )
+
+        expense_date = st.date_input(
+            "Expense Date",
+            value=datetime.today().date()
+        )
+
+        submitted = st.form_submit_button(
+            "＋ Add Expense",
+            use_container_width=True
+        )
+
+        if submitted:
+
+            if not expense_name.strip():
+
+                st.error("Please enter an expense name.")
+
+            elif expense_amount <= 0:
+
+                st.error("Please enter an amount greater than zero.")
+
+            else:
+
+                new_record = [
+                    expense_name.strip(),
+                    expense_amount,
+                    expense_date.strftime("%d-%m-%Y"),
+                    expense_category
+                ]
+
+                try:
+
+                    with open(
+                        DATA_FILE,
+                        "a",
+                        newline="",
+                        encoding="utf-8"
+                    ) as file:
+
+                        writer = csv.writer(file)
+                        writer.writerow(new_record)
+
+                    st.success("Expense added successfully! 💚")
+
+                    st.rerun()
+
+                except OSError:
+
+                    st.error(
+                        "Could not save the expense. "
+                        "Please check the file location."
+                    )
+
+    st.markdown(
+        """
+        <div class="note-card">
+            <div class="note-title">Quick reminder 🌱</div>
+            <div class="note-text">
+                Every transaction you add is saved in your
+                PocketTrack expense file.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+# ==========================================
 # SIDEBAR
+# ==========================================
+
 with st.sidebar:
+
     st.markdown(
         """
         <div class="brand">◈ PocketTrack</div>
-        <div class="brand-subtitle">Your money, in perspective.</div>
+        <div class="brand-subtitle">
+            Your money, in perspective.
+        </div>
         """,
         unsafe_allow_html=True
     )
 
     page = st.radio(
         "NAVIGATION",
-        ["Dashboard", "Expenses", "Monthly Report"]
+        [
+            "Dashboard",
+            "Add Expense",
+            "Expenses",
+            "Monthly Report"
+        ]
     )
 
     st.markdown("---")
+
     st.caption("YOUR FINANCIAL SNAPSHOT")
 
-    st.metric("Total spending", f"{total_spent:,.2f}")
-    st.caption(f"{transaction_count} transaction(s) recorded")
+    st.metric(
+        "Total spending",
+        f"₹{total_spent:,.2f}"
+    )
+
+    st.caption(
+        f"{transaction_count} transaction(s) recorded"
+    )
 
 
+# ==========================================
 # DASHBOARD PAGE
+# ==========================================
+
 if page == "Dashboard":
 
+    # NOTE: no blank lines inside the HTML below.
+    # A blank line makes Streamlit show the HTML as code.
     st.markdown(
         """
         <div class="hero">
@@ -537,18 +797,28 @@ if page == "Dashboard":
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("Total Spent", f"{total_spent:,.2f}")
+
+        st.metric(
+            "Total Spent",
+            f"₹{total_spent:,.2f}"
+        )
 
     with col2:
-        st.metric("This Month", f"{current_month_spending:,.2f}")
+
+        st.metric(
+            "This Month",
+            f"₹{current_month_spending:,.2f}"
+        )
 
     with col3:
-        st.metric("Transactions", f"{transaction_count:,}")
 
-    # Line graph first
+        st.metric(
+            "Transactions",
+            f"{transaction_count:,}"
+        )
+
     show_monthly_chart()
 
-    # Circular chart BELOW the line graph
     show_expense_breakdown()
 
     show_recent_transactions()
@@ -568,33 +838,63 @@ if page == "Dashboard":
     )
 
 
+# ==========================================
+# ADD EXPENSE PAGE
+# ==========================================
+
+elif page == "Add Expense":
+
+    add_expense_page()
+
+
+# ==========================================
 # EXPENSES PAGE
+# ==========================================
+
 elif page == "Expenses":
 
     st.title("Your Expenses")
-    st.caption("Every recorded transaction, all in one place.")
+
+    st.caption(
+        "Every recorded transaction, all in one place."
+    )
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.metric("Total Spent", f"{total_spent:,.2f}")
+
+        st.metric(
+            "Total Spent",
+            f"₹{total_spent:,.2f}"
+        )
 
     with col2:
-        st.metric("Transactions", f"{transaction_count:,}")
+
+        st.metric(
+            "Transactions",
+            f"{transaction_count:,}"
+        )
 
     if df.empty:
-        st.info("No expenses found. Add expenses using PocketTrack.py.")
+
+        st.info(
+            "No expenses found. Visit Add Expense to get started."
+        )
 
     else:
-        display_df = df[["Name", "Amount", "Date"]].copy()
+
+        display_df = df[
+            ["Name", "Amount", "Category", "Date"]
+        ].copy()
 
         display_df["Date"] = display_df["Date"].apply(
             lambda value: value.strftime("%d %b %Y")
-            if pd.notna(value) else "Date not recorded"
+            if pd.notna(value)
+            else "Date not recorded"
         )
 
         display_df["Amount"] = display_df["Amount"].map(
-            lambda value: f"{value:,.2f}"
+            lambda value: f"₹{value:,.2f}"
         )
 
         st.dataframe(
@@ -604,29 +904,44 @@ elif page == "Expenses":
         )
 
     st.caption(
-        "This dashboard reads expenses.txt and does not edit "
-        "or delete your records."
+        "Your transactions are stored in expenses.txt."
     )
 
 
+# ==========================================
 # MONTHLY REPORT PAGE
+# ==========================================
+
 elif page == "Monthly Report":
 
     st.title("Monthly Report")
-    st.caption("Your spending trends, without the guesswork.")
+
+    st.caption(
+        "Your spending trends, without the guesswork."
+    )
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.metric("Current Month", f"{current_month_spending:,.2f}")
+
+        st.metric(
+            "Current Month",
+            f"₹{current_month_spending:,.2f}"
+        )
 
     with col2:
-        st.metric("Months Recorded", f"{len(monthly_df):,}")
+
+        st.metric(
+            "Months Recorded",
+            f"{len(monthly_df):,}"
+        )
 
     show_monthly_chart()
+
     show_expense_breakdown()
 
     if not monthly_df.empty:
+
         st.markdown(
             '<div class="section-heading">Monthly Totals</div>',
             unsafe_allow_html=True
@@ -637,14 +952,17 @@ elif page == "Monthly Report":
         ].copy()
 
         report_df = report_df.sort_values(
-            "MonthKey", ascending=False
+            "MonthKey",
+            ascending=False
         )
 
         report_df["Amount"] = report_df["Amount"].map(
-            lambda value: f"{value:,.2f}"
+            lambda value: f"₹{value:,.2f}"
         )
 
-        report_df = report_df[["Month", "Amount"]]
+        report_df = report_df[
+            ["Month", "Amount"]
+        ]
 
         st.dataframe(
             report_df,
@@ -653,7 +971,10 @@ elif page == "Monthly Report":
         )
 
 
+# ==========================================
 # FOOTER
+# ==========================================
+
 st.markdown(
     """
     <div class="footer">

@@ -1,16 +1,28 @@
 # 💸 PocketTrack
 
-A personal expense tracker built with Python and Streamlit to manage expenses and visualize spending patterns through an interactive dashboard.
+A simple expense tracker built with Python and Streamlit. Track your spending, keep your expenses organised, and get a clearer picture of where your money goes.
 
-**Tech Stack:** Python · Streamlit · Pandas · Plotly
+### What it does
+- Create an account and log in securely.
+- Add and track personal expenses.
+- View spending through an interactive dashboard.
+- Check monthly spending reports.
 
-**Status:** 🚧 In Progress
+### Tech Stack
+Python · Streamlit · Supabase · Pandas · Plotly
 
-Built while learning, experimenting, and figuring things out one step at a time. 🌱
-
-### 💻 Run Locally
+### Run Locally
 
 ```bash
-py -m pip install streamlit pandas plotly
+git clone https://github.com/dumbgesh/PocketTrack.git
+cd PocketTrack
+
+py -m pip install -r requirements.txt
 py -m streamlit run app.py
 ```
+
+Before running, configure your Supabase credentials in `.streamlit/secrets.toml` using `.streamlit/secrets.toml.example` as a reference.
+
+---
+
+Built as a learning project, with a focus on keeping personal finance simple.

@@ -463,6 +463,16 @@ def render_auth_page() -> None:
         unsafe_allow_html=True
     )
 
+    # Pre-render state synchronization: safe to update widget state BEFORE instantiation
+    if st.session_state.pop("_auth_reset_reg_form", False):
+        st.session_state.pop("reg_email_input", None)
+        st.session_state.pop("reg_password_input", None)
+        st.session_state.pop("reg_confirm_input", None)
+        st.session_state.pop("login_password_input", None)
+        pending_email = st.session_state.get("registration_pending_email")
+        if pending_email:
+            st.session_state["login_email_input"] = pending_email
+
     # Determine default active tab (e.g. after registration, automatically switch to Log In)
     active_tab = st.session_state.get("auth_active_tab", "🔑 Log In")
 
@@ -589,19 +599,12 @@ def render_auth_page() -> None:
                 success, status_code, message = sign_up(reg_email, reg_password, reg_confirm)
 
                 if success:
-                    # Immediately clear registration form fields
-                    st.session_state["reg_email_input"] = ""
-                    st.session_state["reg_password_input"] = ""
-                    st.session_state["reg_confirm_input"] = ""
-
-                    # Guarantee password is NEVER carried into login form
-                    st.session_state["login_password_input"] = ""
+                    # Request form reset on the next rerun before widgets are instantiated
+                    st.session_state["_auth_reset_reg_form"] = True
 
                     if status_code == "confirmation_required":
-                        # Record pending email for user guidance
+                        # Record pending email for user guidance and login pre-fill
                         st.session_state["registration_pending_email"] = entered_email
-                        # Pre-fill only the email into the login form for convenience
-                        st.session_state["login_email_input"] = entered_email
                         st.session_state["auth_shared_email"] = entered_email
                         # Automatically switch to Log In tab
                         st.session_state["auth_active_tab"] = "🔑 Log In"

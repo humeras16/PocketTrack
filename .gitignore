@@ -1,1 +1,24 @@
+# Data files
 expenses.txt
+
+# Secrets & Environment configuration
+.env
+.env.local
+.env.*.local
+*.env
+.streamlit/secrets.toml
+!.env.example
+!.streamlit/secrets.toml.example
+
+# Python bytecode & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+*.log

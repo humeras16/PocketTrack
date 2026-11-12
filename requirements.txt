@@ -1,3 +1,5 @@
 streamlit
 plotly
 pandas
+supabase
+streamlit-cookies-controller

@@ -13,15 +13,13 @@ Python · Streamlit · Supabase · Pandas · Plotly
 
 ### Run Locally
 
-```bash
-git clone https://github.com/dumbgesh/PocketTrack.git
+git clone https://github.com/humeras16/PocketTrack.git
 cd PocketTrack
 
 py -m pip install -r requirements.txt
 py -m streamlit run app.py
-```
 
-Before running, configure your Supabase credentials in `.streamlit/secrets.toml` using `.streamlit/secrets.toml.example` as a reference.
+Before running, configure your Supabase credentials in .streamlit/secrets.toml using .streamlit/secrets.toml.example as a reference.
 
 ---
 

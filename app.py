@@ -1,5 +1,4 @@
 import os
-import csv
 import calendar
 from datetime import datetime
 
@@ -7,6 +6,48 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+
+from pockettrack.config import (
+    STYLE_FILE,
+    CURRENCY_SYMBOL,
+    MONTH_FULL_FORMAT,
+    CARD,
+    BORDER,
+    GREEN,
+    DEEP_GREEN,
+    TEXT,
+    MUTED,
+    GRID_GREEN,
+    CATEGORIES,
+    SPEND_BUCKETS,
+)
+from pockettrack.storage import (
+    load_expenses,
+    save_expense,
+    update_expense,
+    delete_expense,
+    validate_expense,
+)
+from pockettrack.calculations import (
+    get_current_month,
+    calculate_total_spending,
+    calculate_transaction_count,
+    filter_dated_expenses,
+    calculate_monthly_spending,
+    calculate_current_month_spending,
+    calculate_daily_totals,
+    bucket_for,
+    format_expenses_for_display,
+    format_monthly_report_for_display,
+)
+from pockettrack.auth import (
+    is_authenticated,
+    validate_or_refresh_session,
+    restore_persisted_session,
+    sync_persisted_session,
+    render_auth_page,
+    render_sidebar_user_badge,
+)
 
 
 # ==========================================
@@ -21,488 +62,59 @@ st.set_page_config(
 
 
 # ==========================================
-# COLOURS  (pastel green palette)
+# CUSTOM DESIGN (loaded from assets/style.css)
 # ==========================================
 
-BG = "#F3FAF1"          # very light mint cream
-SIDEBAR = "#DFF3E3"     # soft green
-CARD = "#FFFFFF"        # white cards
-BORDER = "#BFE5CB"      # green border
-GREEN = "#7BCB98"       # main pastel green
-DEEP_GREEN = "#3E9A6A"  # darker green for headings
-SOFT_GREEN = "#DFF5E6"  # very soft green fill
-SKY = "#BBD9F0"
-BUTTER = "#FFF1A8"
-PEACH = "#FFD3B6"
-MINT = "#A8E6CF"
-LAVENDER = "#D9CCFF"
-TEXT = "#3F5247"        # deep green-grey text
-MUTED = "#7B8F83"       # soft grey-green
+def load_css(file_path: str) -> None:
+    """Load and inject an external CSS file into the Streamlit app."""
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as file:
+            st.markdown(f"<style>\n{file.read()}\n</style>", unsafe_allow_html=True)
 
-CATEGORIES = [
-    "Food",
-    "Travel",
-    "Shopping",
-    "Education",
-    "Bills",
-    "Entertainment",
-    "Health",
-    "Other"
-]
 
-# Spending ranges for the daily ring.
-# Each item is (label, upper limit, colour).
-# The last range has no upper limit (None).
-SPEND_BUCKETS = [
-    ("0", 0, "#EEF3EE"),
-    ("1-20", 20, "#DDF3E4"),
-    ("21-40", 40, "#BDE8CB"),
-    ("41-60", 60, "#9DDDB3"),
-    ("61-80", 80, "#7BCB98"),
-    ("81-100", 100, "#5DB880"),
-    ("101-150", 150, "#3F9F68"),
-    ("151+", None, "#2D7F52")
-]
+load_css(STYLE_FILE)
 
 
 # ==========================================
-# CUSTOM DESIGN  (pastel green theme)
+# AUTHENTICATION GATEWAY
 # ==========================================
 
-st.markdown(
-    f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=Nunito:wght@400;600;700&family=Pixelify+Sans:wght@400;600&display=swap');
-
-    html, body, [class*="css"] {{
-        font-family: 'Nunito', sans-serif;
-    }}
-
-    .stApp {{
-        background-color: {BG};
-        background-image: radial-gradient(#DCEFE0 2px, transparent 2px);
-        background-size: 28px 28px;
-        color: {TEXT};
-        font-family: 'Nunito', sans-serif;
-    }}
-
-    [data-testid="stSidebar"] {{
-        background: {SIDEBAR};
-        border-right: 3px dashed {GREEN};
-    }}
-
-    [data-testid="stSidebar"] * {{
-        color: {TEXT};
-    }}
-
-    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {{
-        font-family: 'Pixelify Sans', 'Fredoka', sans-serif;
-        font-size: 18px;
-        font-weight: 600;
-        letter-spacing: 2px;
-        color: {DEEP_GREEN};
-    }}
-
-    [data-testid="stSidebar"] [role="radiogroup"] label p {{
-        font-family: 'Fredoka', sans-serif;
-        font-size: 18px;
-        font-weight: 500;
-        color: {TEXT};
-    }}
-
-    [data-testid="stSidebar"] [role="radiogroup"] label {{
-        padding: 4px 0;
-    }}
-
-    .block-container {{
-        padding-top: 2rem;
-        padding-bottom: 3rem;
-        max-width: 1400px;
-    }}
-
-    h1, h2, h3 {{
-        font-family: 'Pixelify Sans', 'Fredoka', sans-serif !important;
-        color: {DEEP_GREEN} !important;
-        font-weight: 600 !important;
-    }}
-
-    h1 {{
-        font-size: 40px !important;
-    }}
-
-    p, label {{
-        color: {MUTED};
-        font-family: 'Nunito', sans-serif;
-    }}
-
-    [data-testid="stMetric"] {{
-        background: {CARD};
-        border: 2px solid {BORDER};
-        border-radius: 22px;
-        box-shadow: 0 6px 0 rgba(123, 203, 152, 0.30);
-        padding: 20px;
-    }}
-
-    [data-testid="stHorizontalBlock"] > div:nth-child(1) [data-testid="stMetric"] {{
-        background: {SOFT_GREEN};
-    }}
-
-    [data-testid="stHorizontalBlock"] > div:nth-child(2) [data-testid="stMetric"] {{
-        background: #FFF8DB;
-        border-color: #F3E3A3;
-        box-shadow: 0 6px 0 rgba(243, 227, 163, 0.60);
-    }}
-
-    [data-testid="stHorizontalBlock"] > div:nth-child(3) [data-testid="stMetric"] {{
-        background: #E4F1FB;
-        border-color: {SKY};
-        box-shadow: 0 6px 0 rgba(187, 217, 240, 0.70);
-    }}
-
-    [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * {{
-        color: {MUTED} !important;
-        font-family: 'Nunito', sans-serif !important;
-        font-weight: 700 !important;
-    }}
-
-    [data-testid="stMetricValue"], [data-testid="stMetricValue"] * {{
-        color: {DEEP_GREEN} !important;
-        font-family: 'Fredoka', sans-serif !important;
-        font-weight: 600 !important;
-    }}
-
-    div[data-testid="stPlotlyChart"] {{
-        background: {CARD};
-        border: 2px solid {BORDER};
-        border-radius: 22px;
-        box-shadow: 0 6px 0 rgba(123, 203, 152, 0.30);
-        padding: 10px;
-        overflow: hidden;
-    }}
-
-    div[data-testid="stDataFrame"] {{
-        border: 2px solid {BORDER};
-        border-radius: 18px;
-        overflow: hidden;
-    }}
-
-    div[data-baseweb="input"],
-    div[data-baseweb="base-input"],
-    div[data-baseweb="select"] > div {{
-        border-radius: 14px !important;
-    }}
-
-    .hero {{
-        background: linear-gradient(120deg, #D5F2DF, #E4F1FB, #FFF3D1);
-        border: 3px solid #FFFFFF;
-        border-radius: 28px;
-        box-shadow: 0 8px 0 rgba(123, 203, 152, 0.35);
-        padding: 30px;
-        margin-bottom: 28px;
-    }}
-
-    .hero-label {{
-        color: {DEEP_GREEN};
-        font-family: 'Fredoka', sans-serif;
-        font-size: 13px;
-        font-weight: 600;
-        letter-spacing: 2px;
-    }}
-
-    .hero-title {{
-        color: {TEXT};
-        font-family: 'Pixelify Sans', 'Fredoka', sans-serif;
-        font-size: 40px;
-        font-weight: 600;
-        margin-top: 8px;
-        margin-bottom: 8px;
-    }}
-
-    .hero-text {{
-        color: {TEXT};
-        font-family: 'Nunito', sans-serif;
-        font-size: 16px;
-        font-weight: 600;
-    }}
-
-    .section-heading {{
-        color: {DEEP_GREEN};
-        font-family: 'Fredoka', sans-serif;
-        font-size: 23px;
-        font-weight: 600;
-        margin-top: 28px;
-        margin-bottom: 4px;
-    }}
-
-    .section-subtitle {{
-        color: {MUTED};
-        font-size: 14px;
-        margin-bottom: 15px;
-    }}
-
-    .brand {{
-        font-family: 'Pixelify Sans', 'Fredoka', sans-serif;
-        font-size: 28px;
-        font-weight: 600;
-        color: {DEEP_GREEN};
-        padding: 10px 0 0 0;
-    }}
-
-    .brand-subtitle {{
-        font-size: 13px;
-        color: {MUTED};
-        margin-bottom: 25px;
-    }}
-
-    .note-card {{
-        background: {CARD};
-        border: 2px solid {BORDER};
-        border-left: 8px solid {SKY};
-        border-radius: 22px;
-        box-shadow: 0 6px 0 rgba(187, 217, 240, 0.50);
-        padding: 18px 22px;
-        margin-top: 20px;
-    }}
-
-    .note-title {{
-        color: {DEEP_GREEN};
-        font-family: 'Fredoka', sans-serif;
-        font-size: 17px;
-        font-weight: 600;
-        margin-bottom: 5px;
-    }}
-
-    .note-text {{
-        color: {TEXT};
-        font-size: 14px;
-    }}
-
-    .ring-legend {{
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 10px 22px;
-        margin-top: 16px;
-        margin-bottom: 6px;
-    }}
-
-    .ring-item {{
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        color: {TEXT};
-        font-family: 'Nunito', sans-serif;
-        font-size: 14px;
-        font-weight: 700;
-    }}
-
-    .ring-box {{
-        display: inline-block;
-        width: 20px;
-        height: 20px;
-        border-radius: 6px;
-        border: 2px solid {BORDER};
-    }}
-
-    .footer {{
-        text-align: center;
-        color: {MUTED};
-        font-size: 13px;
-        padding-top: 40px;
-    }}
-
-    div.stButton > button,
-    div[data-testid="stFormSubmitButton"] > button {{
-        background-color: {GREEN};
-        color: #FFFFFF;
-        border: none;
-        border-radius: 999px;
-        box-shadow: 0 5px 0 {DEEP_GREEN};
-        font-family: 'Fredoka', sans-serif;
-        font-weight: 600;
-        font-size: 16px;
-        padding: 10px 22px;
-    }}
-
-    div.stButton > button:hover,
-    div[data-testid="stFormSubmitButton"] > button:hover {{
-        background-color: #93D8AB;
-        color: #FFFFFF;
-        border: none;
-    }}
-
-    div.stButton > button:active,
-    div[data-testid="stFormSubmitButton"] > button:active {{
-        box-shadow: 0 0 0 {DEEP_GREEN};
-        transform: translateY(5px);
-    }}
-
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-
-# ==========================================
-# FILE LOCATION
-# ==========================================
-
-DATA_FILE = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "expenses.txt"
-)
-
-
-# ==========================================
-# LOAD EXPENSES
-# ==========================================
-
-def load_expenses():
-
-    records = []
-
-    if not os.path.exists(DATA_FILE):
-        return pd.DataFrame(
-            columns=["Name", "Amount", "Date", "Category"]
-        )
-
-    with open(DATA_FILE, "r", encoding="utf-8") as file:
-
-        for line in file:
-
-            line = line.strip()
-
-            if not line:
-                continue
-
-            try:
-
-                # Read newly saved CSV records and
-                # older records with two or three fields.
-
-                if line.startswith('"'):
-
-                    parts = next(csv.reader([line]))
-
-                else:
-
-                    parts = line.rsplit(",", 3)
-
-                    if len(parts) == 4:
-
-                        try:
-                            datetime.strptime(
-                                parts[2].strip(),
-                                "%d-%m-%Y"
-                            )
-
-                        except ValueError:
-
-                            parts = line.rsplit(",", 2)
-
-                if len(parts) == 4:
-
-                    name, amount, date_text, category = parts
-
-                    date_value = datetime.strptime(
-                        date_text.strip(),
-                        "%d-%m-%Y"
-                    ).date()
-
-                elif len(parts) == 3:
-
-                    name, amount, date_text = parts
-
-                    date_value = datetime.strptime(
-                        date_text.strip(),
-                        "%d-%m-%Y"
-                    ).date()
-
-                    category = "Uncategorized"
-
-                elif len(parts) == 2:
-
-                    name, amount = parts
-
-                    date_value = None
-                    category = "Uncategorized"
-
-                else:
-                    continue
-
-                amount = float(amount.strip())
-                name = name.strip()
-
-                if name and amount >= 0:
-
-                    records.append({
-                        "Name": name,
-                        "Amount": amount,
-                        "Date": date_value,
-                        "Category": category.strip()
-                    })
-
-            except (ValueError, TypeError, csv.Error):
-                continue
-
-    df = pd.DataFrame(
-        records,
-        columns=["Name", "Amount", "Date", "Category"]
+# Restore persisted session from browser cookie on refresh/startup if not in state
+if not is_authenticated():
+    restore_persisted_session()
+
+# Validate or refresh session if already authenticated
+if is_authenticated():
+    validate_or_refresh_session()
+
+# Synchronize cookie persistence state (writes on login/rotation, clears on logout)
+sync_persisted_session()
+
+# Gate unauthenticated users
+if not is_authenticated():
+    render_auth_page()
+    st.markdown(
+        """
+        <div class="footer">
+            made with 💚 · spend mindfully, track confidently ✿
+        </div>
+        """,
+        unsafe_allow_html=True
     )
-
-    if not df.empty:
-
-        df["Date"] = pd.to_datetime(
-            df["Date"],
-            errors="coerce"
-        )
-
-    return df
+    st.stop()
 
 
-# Load saved expenses
+# ==========================================
+# DATA LOADING & SUMMARY CALCULATIONS
+# ==========================================
+
 df = load_expenses()
-
-
-# ==========================================
-# CALCULATIONS
-# ==========================================
-
-today = pd.Timestamp.today().normalize()
-current_month = today.to_period("M")
-
-total_spent = df["Amount"].sum() if not df.empty else 0
-
-transaction_count = len(df)
-
-dated_df = df.dropna(subset=["Date"]).copy()
-
-if not dated_df.empty:
-
-    dated_df["MonthKey"] = dated_df["Date"].dt.to_period("M")
-
-    monthly_df = (
-        dated_df.groupby("MonthKey", as_index=False)["Amount"]
-        .sum()
-        .sort_values("MonthKey")
-    )
-
-    monthly_df["Month"] = monthly_df["MonthKey"].dt.strftime(
-        "%b %Y"
-    )
-
-    current_month_spending = dated_df.loc[
-        dated_df["MonthKey"] == current_month,
-        "Amount"
-    ].sum()
-
-else:
-
-    monthly_df = pd.DataFrame(
-        columns=["MonthKey", "Amount", "Month"]
-    )
-
-    current_month_spending = 0
+current_month = get_current_month()
+total_spent = calculate_total_spending(df)
+transaction_count = calculate_transaction_count(df)
+dated_df = filter_dated_expenses(df)
+monthly_df = calculate_monthly_spending(dated_df)
+current_month_spending = calculate_current_month_spending(dated_df, current_month)
 
 
 # ==========================================
@@ -544,7 +156,7 @@ def chart_layout(fig, height=380):
     )
 
     fig.update_yaxes(
-        gridcolor="#E3F3E8",
+        gridcolor=GRID_GREEN,
         zeroline=False,
         tickfont=dict(color=TEXT, size=12),
         title_font=dict(color=MUTED, size=14)
@@ -557,7 +169,7 @@ def chart_layout(fig, height=380):
 # MONTHLY LINE GRAPH
 # ==========================================
 
-def show_monthly_chart():
+def show_monthly_chart(monthly_data: pd.DataFrame):
 
     st.markdown(
         '<div class="section-heading">Monthly Spending Trend 📈</div>',
@@ -571,7 +183,7 @@ def show_monthly_chart():
         unsafe_allow_html=True
     )
 
-    if monthly_df.empty:
+    if monthly_data.empty:
 
         st.info(
             "Your monthly line graph will appear when you have "
@@ -582,7 +194,7 @@ def show_monthly_chart():
         return
 
     fig = px.line(
-        monthly_df,
+        monthly_data,
         x="Month",
         y="Amount",
         markers=True,
@@ -606,8 +218,8 @@ def show_monthly_chart():
         fillcolor="rgba(123,203,152,0.18)",
 
         hovertemplate=(
-            "<b>%{x}</b><br>"
-            "Spent: ₹%{y:,.2f}"
+            f"<b>%{{x}}</b><br>"
+            f"Spent: {CURRENCY_SYMBOL}%{{y:,.2f}}"
             "<extra></extra>"
         )
     )
@@ -615,7 +227,7 @@ def show_monthly_chart():
     fig.update_yaxes(rangemode="tozero")
 
     # A little space on the left and right so labels are not cut off
-    fig.update_xaxes(range=[-0.3, len(monthly_df) - 0.7])
+    fig.update_xaxes(range=[-0.3, len(monthly_data) - 0.7])
 
     fig = chart_layout(fig, height=400)
 
@@ -625,7 +237,7 @@ def show_monthly_chart():
 
     fig.update_yaxes(
         title_text=None,
-        tickprefix="₹",
+        tickprefix=CURRENCY_SYMBOL,
         tickformat=",",
         automargin=True
     )
@@ -648,25 +260,7 @@ def show_monthly_chart():
 # DAILY SPENDING RING (bullet journal style)
 # ==========================================
 
-def bucket_for(amount):
-
-    # Returns the position of the spending range
-    # in SPEND_BUCKETS for one day's total.
-
-    if amount <= 0:
-        return 0
-
-    for index in range(1, len(SPEND_BUCKETS) - 1):
-
-        upper_limit = SPEND_BUCKETS[index][1]
-
-        if amount <= upper_limit:
-            return index
-
-    return len(SPEND_BUCKETS) - 1
-
-
-def show_spending_ring():
+def show_spending_ring(dated_data: pd.DataFrame, current_period: pd.Period):
 
     st.markdown(
         '<div class="section-heading">Daily Spending Ring 🍩</div>',
@@ -681,7 +275,7 @@ def show_spending_ring():
         unsafe_allow_html=True
     )
 
-    if dated_df.empty:
+    if dated_data.empty:
 
         st.info(
             "Your spending ring will appear when you have "
@@ -693,15 +287,15 @@ def show_spending_ring():
     # ---- Month picker ----
 
     periods = sorted(
-        set(dated_df["MonthKey"]) | {current_month},
+        set(dated_data["MonthKey"]) | {current_period},
         reverse=True
     )
 
     month_labels = [
-        period.strftime("%B %Y") for period in periods
+        period.strftime(MONTH_FULL_FORMAT) for period in periods
     ]
 
-    latest_index = periods.index(dated_df["MonthKey"].max())
+    latest_index = periods.index(dated_data["MonthKey"].max())
 
     pick_col, _ = st.columns([1, 2])
 
@@ -723,13 +317,7 @@ def show_spending_ring():
         chosen_period.month
     )[1]
 
-    month_data = dated_df[dated_df["MonthKey"] == chosen_period]
-
-    daily_totals = (
-        month_data.groupby(month_data["Date"].dt.day)["Amount"]
-        .sum()
-        .to_dict()
-    )
+    daily_totals = calculate_daily_totals(dated_data, chosen_period)
 
     day_numbers = list(range(1, days_in_month + 1))
 
@@ -750,10 +338,10 @@ def show_spending_ring():
         if bucket_id == 0:
             range_text = "No spending"
         else:
-            range_text = f"Range: ₹{SPEND_BUCKETS[bucket_id][0]}"
+            range_text = f"Range: {CURRENCY_SYMBOL}{SPEND_BUCKETS[bucket_id][0]}"
 
         hover_data.append(
-            [day, f"₹{amount:,.2f}", range_text]
+            [day, f"{CURRENCY_SYMBOL}{amount:,.2f}", range_text]
         )
 
     # ---- Build the ring ----
@@ -815,7 +403,7 @@ def show_spending_ring():
             dict(
                 text=(
                     "💵<br>"
-                    f"<b>₹{month_total:,.0f}</b><br>"
+                    f"<b>{CURRENCY_SYMBOL}{month_total:,.0f}</b><br>"
                     f"{chosen_label}"
                 ),
                 x=0.5,
@@ -873,98 +461,16 @@ def show_spending_ring():
         st.caption(
             f"{spending_days} spending day(s), "
             f"{days_in_month - spending_days} no-spend day(s). "
-            f"Biggest day: {biggest_day} (₹{biggest_amount:,.2f}). "
+            f"Biggest day: {biggest_day} ({CURRENCY_SYMBOL}{biggest_amount:,.2f}). "
             "Expenses without a date are not shown here."
         )
-
-
-# ==========================================
-# CATEGORY-WISE EXPENSE BREAKDOWN
-# (not used right now, kept so we can bring it back later)
-# ==========================================
-
-def show_expense_breakdown():
-
-    st.markdown(
-        '<div class="section-heading">Where Your Money Goes 🍰</div>',
-        unsafe_allow_html=True
-    )
-
-    st.markdown(
-        '<div class="section-subtitle">'
-        'See how your spending is divided across categories.'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-    if df.empty:
-
-        st.info("Add some expenses to see your breakdown.")
-
-        return
-
-    breakdown = (
-        df.groupby("Category", as_index=False)["Amount"]
-        .sum()
-        .sort_values("Amount", ascending=False)
-    )
-
-    fig = px.pie(
-        breakdown,
-        names="Category",
-        values="Amount",
-        hole=0.6,
-        color_discrete_sequence=[
-            GREEN,
-            SKY,
-            BUTTER,
-            PEACH,
-            LAVENDER,
-            MINT,
-            "#8EC5FF",
-            "#B5EAD7",
-            "#E2C6FF"
-        ]
-    )
-
-    fig.update_traces(
-        textposition="outside",
-        textinfo="percent",
-        textfont=dict(
-            family="Nunito, sans-serif",
-            size=14,
-            color=TEXT
-        ),
-
-        hovertemplate=(
-            "<b>%{label}</b><br>"
-            "Amount: ₹%{value:,.2f}<br>"
-            "Share: %{percent}"
-            "<extra></extra>"
-        ),
-
-        marker=dict(
-            line=dict(color="#FFFFFF", width=3)
-        )
-    )
-
-    fig.update_layout(showlegend=True)
-
-    fig = chart_layout(fig, height=430)
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True,
-        theme=None,
-        config={"displayModeBar": False}
-    )
 
 
 # ==========================================
 # RECENT TRANSACTIONS
 # ==========================================
 
-def show_recent_transactions():
+def show_recent_transactions(expenses_data: pd.DataFrame):
 
     st.markdown(
         '<div class="section-heading">Recent Transactions 🧾</div>',
@@ -978,38 +484,13 @@ def show_recent_transactions():
         unsafe_allow_html=True
     )
 
-    if df.empty:
+    if expenses_data.empty:
 
         st.info("No expenses recorded yet.")
 
         return
 
-    recent = df.copy()
-
-    recent["_sort_date"] = pd.to_datetime(
-        recent["Date"],
-        errors="coerce"
-    )
-
-    recent = recent.sort_values(
-        "_sort_date",
-        ascending=False,
-        na_position="last"
-    ).head(8)
-
-    display_df = recent[
-        ["Name", "Amount", "Category", "Date"]
-    ].copy()
-
-    display_df["Date"] = display_df["Date"].apply(
-        lambda value: value.strftime("%d %b %Y")
-        if pd.notna(value)
-        else "Date not recorded"
-    )
-
-    display_df["Amount"] = display_df["Amount"].map(
-        lambda value: f"₹{value:,.2f}"
-    )
+    display_df = format_expenses_for_display(expenses_data, limit=8)
 
     st.dataframe(
         display_df,
@@ -1030,6 +511,10 @@ def add_expense_page():
         "Record your spending and keep everything organised."
     )
 
+    # Show success toast after confirmed successful insertion
+    if st.session_state.pop("expense_added_success", False):
+        st.toast("Expense added successfully!", icon="💚")
+
     st.markdown(
         '<div class="section-heading">Transaction Details</div>',
         unsafe_allow_html=True
@@ -1042,11 +527,17 @@ def add_expense_page():
         unsafe_allow_html=True
     )
 
-    with st.form("add_expense_form"):
+    if "expense_form_version" not in st.session_state:
+        st.session_state["expense_form_version"] = 0
+
+    ver = st.session_state["expense_form_version"]
+
+    with st.form("add_expense_form", enter_to_submit=False):
 
         expense_name = st.text_input(
             "Expense Name",
-            placeholder="Example: Lunch, Books, Bus ticket"
+            placeholder="Example: Lunch, Books, Bus ticket",
+            key=f"expense_name_{ver}"
         )
 
         col1, col2 = st.columns(2)
@@ -1054,22 +545,26 @@ def add_expense_page():
         with col1:
 
             expense_amount = st.number_input(
-                "Amount (₹)",
+                f"Amount ({CURRENCY_SYMBOL})",
                 min_value=0.01,
-                value=100.0,
-                step=10.0
+                value=None,
+                step=10.0,
+                placeholder="0.00",
+                key=f"expense_amount_{ver}"
             )
 
         with col2:
 
             expense_category = st.selectbox(
                 "Category",
-                CATEGORIES
+                CATEGORIES,
+                key=f"expense_category_{ver}"
             )
 
         expense_date = st.date_input(
             "Expense Date",
-            value=datetime.today().date()
+            value=datetime.today().date(),
+            key=f"expense_date_{ver}"
         )
 
         submitted = st.form_submit_button(
@@ -1079,53 +574,43 @@ def add_expense_page():
 
         if submitted:
 
-            if not expense_name.strip():
+            is_valid, validation_error = validate_expense(
+                expense_name,
+                expense_amount if expense_amount is not None else 0.0
+            )
 
-                st.error("Please enter an expense name.")
+            if not is_valid:
 
-            elif expense_amount <= 0:
-
-                st.error("Please enter an amount greater than zero.")
+                st.error(validation_error)
 
             else:
 
-                new_record = [
-                    expense_name.strip(),
+                saved, save_error = save_expense(
+                    expense_name,
                     expense_amount,
-                    expense_date.strftime("%d-%m-%Y"),
+                    expense_date,
                     expense_category
-                ]
+                )
 
-                try:
+                if saved:
 
-                    with open(
-                        DATA_FILE,
-                        "a",
-                        newline="",
-                        encoding="utf-8"
-                    ) as file:
-
-                        writer = csv.writer(file)
-                        writer.writerow(new_record)
-
-                    st.success("Expense added successfully! 💚")
+                    # Reset form fields on confirmed successful insert and show toast
+                    st.session_state["expense_form_version"] += 1
+                    st.session_state["expense_added_success"] = True
 
                     st.rerun()
 
-                except OSError:
+                else:
 
-                    st.error(
-                        "Could not save the expense. "
-                        "Please check the file location."
-                    )
+                    st.error(save_error)
 
     st.markdown(
         """
         <div class="note-card">
             <div class="note-title">Quick reminder 🌱</div>
             <div class="note-text">
-                Every transaction you add is saved in your
-                PocketTrack expense file.
+                Every transaction you add is securely saved in your
+                private PocketTrack database.
             </div>
         </div>
         """,
@@ -1149,6 +634,8 @@ with st.sidebar:
         unsafe_allow_html=True
     )
 
+    render_sidebar_user_badge()
+
     page = st.radio(
         "NAVIGATION",
         [
@@ -1165,7 +652,7 @@ with st.sidebar:
 
     st.metric(
         "Total spending",
-        f"₹{total_spent:,.2f}"
+        f"{CURRENCY_SYMBOL}{total_spent:,.2f}"
     )
 
     st.caption(
@@ -1201,14 +688,14 @@ if page == "Dashboard":
 
         st.metric(
             "Total Spent",
-            f"₹{total_spent:,.2f}"
+            f"{CURRENCY_SYMBOL}{total_spent:,.2f}"
         )
 
     with col2:
 
         st.metric(
             "This Month",
-            f"₹{current_month_spending:,.2f}"
+            f"{CURRENCY_SYMBOL}{current_month_spending:,.2f}"
         )
 
     with col3:
@@ -1218,11 +705,11 @@ if page == "Dashboard":
             f"{transaction_count:,}"
         )
 
-    show_monthly_chart()
+    show_monthly_chart(monthly_df)
 
-    show_spending_ring()
+    show_spending_ring(dated_df, current_month)
 
-    show_recent_transactions()
+    show_recent_transactions(df)
 
     st.markdown(
         """
@@ -1266,7 +753,7 @@ elif page == "Expenses":
 
         st.metric(
             "Total Spent",
-            f"₹{total_spent:,.2f}"
+            f"{CURRENCY_SYMBOL}{total_spent:,.2f}"
         )
 
     with col2:
@@ -1284,19 +771,7 @@ elif page == "Expenses":
 
     else:
 
-        display_df = df[
-            ["Name", "Amount", "Category", "Date"]
-        ].copy()
-
-        display_df["Date"] = display_df["Date"].apply(
-            lambda value: value.strftime("%d %b %Y")
-            if pd.notna(value)
-            else "Date not recorded"
-        )
-
-        display_df["Amount"] = display_df["Amount"].map(
-            lambda value: f"₹{value:,.2f}"
-        )
+        display_df = format_expenses_for_display(df)
 
         st.dataframe(
             display_df,
@@ -1305,7 +780,7 @@ elif page == "Expenses":
         )
 
     st.caption(
-        "Your transactions are stored in expenses.txt."
+        "Your transactions are securely saved in your PocketTrack account."
     )
 
 
@@ -1327,7 +802,7 @@ elif page == "Monthly Report":
 
         st.metric(
             "Current Month",
-            f"₹{current_month_spending:,.2f}"
+            f"{CURRENCY_SYMBOL}{current_month_spending:,.2f}"
         )
 
     with col2:
@@ -1337,9 +812,9 @@ elif page == "Monthly Report":
             f"{len(monthly_df):,}"
         )
 
-    show_monthly_chart()
+    show_monthly_chart(monthly_df)
 
-    show_spending_ring()
+    show_spending_ring(dated_df, current_month)
 
     if not monthly_df.empty:
 
@@ -1348,22 +823,7 @@ elif page == "Monthly Report":
             unsafe_allow_html=True
         )
 
-        report_df = monthly_df[
-            ["MonthKey", "Month", "Amount"]
-        ].copy()
-
-        report_df = report_df.sort_values(
-            "MonthKey",
-            ascending=False
-        )
-
-        report_df["Amount"] = report_df["Amount"].map(
-            lambda value: f"₹{value:,.2f}"
-        )
-
-        report_df = report_df[
-            ["Month", "Amount"]
-        ]
+        report_df = format_monthly_report_for_display(monthly_df)
 
         st.dataframe(
             report_df,
